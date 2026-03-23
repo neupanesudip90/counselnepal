@@ -69,7 +69,7 @@ export default function UniversitiesPage() {
             { label: 'Total Universities', val: filtered.length, icon: GraduationCap, color: 'text-primary bg-primary/10' },
             { label: 'With Scholarships', val: filtered.filter((u) => u.scholarship).length, icon: Trophy, color: 'text-amber-600 bg-amber-100' },
             { label: 'Free Tuition', val: filtered.filter((u) => u.tuitionMin === 0).length, icon: DollarSign, color: 'text-green-600 bg-green-100' },
-            { label: 'Countries', val: [...new Set(filtered.map((u) => u.country))].length, icon: Globe, color: 'text-violet-600 bg-violet-100' },
+            { label: 'Countries', val: Array.from(new Set(filtered.map((u) => u.country))).length, icon: Globe, color: 'text-violet-600 bg-violet-100' },
           ].map(({ label, val, icon: Icon, color }) => (
             <div key={label} className="bg-white rounded-2xl border border-border p-4">
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${color}`}><Icon className="w-4 h-4" /></div>
