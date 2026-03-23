@@ -1,9 +1,9 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
   "/page": "app/page.js",
-  "/counsellors/page": "app/counsellors/page.js",
-  "/counsellors/[id]/page": "app/counsellors/[id]/page.js",
-  "/admin/analytics/page": "app/admin/analytics/page.js",
-  "/admin/consultancies/page": "app/admin/consultancies/page.js",
-  "/admin/counsellors/page": "app/admin/counsellors/page.js"
+  "/consultancies/page": "app/consultancies/page.js",
+  "/events/page": "app/events/page.js",
+  "/consultancies/[id]/page": "app/consultancies/[id]/page.js",
+  "/login/page": "app/login/page.js",
+  "/universities/page": "app/universities/page.js",
+  "/resources/page": "app/resources/page.js"
 }
