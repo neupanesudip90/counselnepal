@@ -11,40 +11,15 @@
       "static/css/css-app_globals_css.css",
       "static/chunks/app/layout.js"
     ],
-    "/counsellors/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/counsellors/page.js"
-    ],
-    "/consultancies/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/consultancies/page.js"
-    ],
-    "/consultancies/[id]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/consultancies/[id]/page.js"
-    ],
-    "/events/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/events/page.js"
-    ],
-    "/login/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/login/page.js"
-    ],
     "/universities/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/universities/page.js"
     ],
-    "/resources/page": [
+    "/consultancies/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/resources/page.js"
+      "static/chunks/app/consultancies/page.js"
     ]
   }
 }

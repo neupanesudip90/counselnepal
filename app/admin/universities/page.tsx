@@ -11,7 +11,7 @@ export default function AdminUniversitiesPage() {
   const [showModal, setShowModal] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
-  const countries = [...new Set(data.map((u) => u.country))]
+  const countries = Array.from(new Set(data.map((u) => u.country)))
   const filtered = data.filter((u) => {
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase())
     const matchCountry = !filterCountry || u.country === filterCountry

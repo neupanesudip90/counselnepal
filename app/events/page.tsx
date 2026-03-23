@@ -11,7 +11,7 @@ export default function EventsPage() {
   const [filterType, setFilterType] = useState('')
   const [filterFree, setFilterFree] = useState(false)
 
-  const types = [...new Set(events.map((e) => e.type))]
+  const types = Array.from(new Set(events.map((e) => e.type)))
 
   const filtered = events.filter((e) => {
     const matchSearch = e.title.toLowerCase().includes(search.toLowerCase()) || e.consultancy.toLowerCase().includes(search.toLowerCase())

@@ -18,7 +18,7 @@ export default function UniversitiesPage() {
     return matchCountry && matchSearch && matchScholarship
   })
 
-  const countryGroups = [...new Set(universities.map((u) => u.country))]
+  const countryGroups = Array.from(new Set(universities.map((u) => u.country)))
 
   return (
     <div className="min-h-screen bg-white">
