@@ -250,23 +250,14 @@ export default function ReelsPage() {
           >
             {/* 📹 Video */}
             <video
-              src={current?.video && (
-  <video
-    key={currentIndex}
-    src={current.video}
-    className="w-full h-full object-cover"
-    autoPlay
-    muted
-    loop
-    playsInline
-  />
-)}
-              className="w-full h-full object-cover"
-              autoPlay
-              muted
-              loop
-              playsInline
-            />
+  key={currentIndex}
+  src={typeof current?.video === 'string' && current.video.length > 0 ? current.video : undefined}
+  className="w-full h-full object-cover"
+  autoPlay
+  loop
+  muted
+  playsInline
+/>
 
             {/* 🌙 Dark gradient overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
