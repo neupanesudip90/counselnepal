@@ -250,7 +250,17 @@ export default function ReelsPage() {
           >
             {/* 📹 Video */}
             <video
-              src={current?.video}
+              src={current?.video && (
+  <video
+    key={currentIndex}
+    src={current.video}
+    className="w-full h-full object-cover"
+    autoPlay
+    muted
+    loop
+    playsInline
+  />
+)}
               className="w-full h-full object-cover"
               autoPlay
               muted
