@@ -6,7 +6,15 @@ import { successStories } from '../data'
 import { X, Heart, MessageCircle, Send, ChevronUp, ChevronDown, BadgeCheck, ArrowLeft, Share2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-const allComments: Record<number, { id: number; user: string; text: string; time: string; likes: number }[]> = {
+type Comment = {
+  id: number
+  user: string
+  text: string
+  time: string
+  likes: number
+}
+
+const allComments: Record<number, Comment[]> = {
   1: [
     { id: 1, user: 'Ram Sharma', text: 'Inspiring! Australia dream 🇦🇺 herna milyo', time: '2h', likes: 12 },
     { id: 2, user: 'Sita KC', text: 'Which consultancy use gareko bro?', time: '1h', likes: 5 },
@@ -31,13 +39,11 @@ const allComments: Record<number, { id: number; user: string; text: string; time
   ],
 }
 
-// Minimum vertical swipe distance to trigger change (pixels)
-const SWIPE_THRESHOLD = 80
-
 export default function ReelsPage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [likes, setLikes] = useState<Record<number, boolean>>({})
-  const [comments, setComments] = useState<Record<number, []>>(allComments)
+  // ✅ FIX: Remove explicit type or use same as allComments
+  const [comments, setComments] = useState(allComments)
   const [newComment, setNewComment] = useState('')
   const [showComments, setShowComments] = useState(false)
   const [likedComments, setLikedComments] = useState<Record<number, boolean>>({})
@@ -59,7 +65,6 @@ export default function ReelsPage() {
     if (isScrolling.current) return
     isScrolling.current = true
 
-    // Handle infinite loop
     let finalIndex = newIndex
     if (finalIndex < 0) {
       finalIndex = videoStories.length - 1
@@ -71,7 +76,7 @@ export default function ReelsPage() {
       setCurrentIndex(finalIndex)
       setShowComments(false)
       isScrolling.current = false
-    }, 150) // Small delay for smooth transition feel
+    }, 150)
   }, [videoStories.length])
 
   const goNext = useCallback(() => {
@@ -87,7 +92,7 @@ export default function ReelsPage() {
   // ========================================
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (showComments) return // Disable while comments open
+      if (showComments) return
 
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -113,7 +118,7 @@ export default function ReelsPage() {
       if (showComments || isScrolling.current) return
 
       const delta = e.deltaY
-      if (Math.abs(delta) > 10) { // Prevent tiny scrolls
+      if (Math.abs(delta) > 10) {
         if (delta > 0) {
           goNext()
         } else {
@@ -130,7 +135,7 @@ export default function ReelsPage() {
   // ✅ Touch/swipe (mobile)
   // ========================================
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (showComments) return // Don't swipe while comments open
+    if (showComments) return
 
     touchStartY.current = e.touches[0].clientY
     touchStartTime.current = Date.now()
@@ -138,27 +143,20 @@ export default function ReelsPage() {
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (showComments) return
-    // Optional: prevent horizontal scroll interference
-    const xDiff = Math.abs(e.touches[0].clientX - (touchStartY.current as any))
-    if (xDiff > 50) {
-      // User is swiping horizontally - ignore vertical swipe
-    }
   }, [showComments])
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (showComments) return
 
+    const SWIPE_THRESHOLD = 80
     const touchEndY = e.changedTouches[0].clientY
     const deltaY = touchEndY - touchStartY.current
     const elapsed = Date.now() - touchStartTime.current
 
-    // Detect swipe direction
     if (elapsed < 500 && Math.abs(deltaY) > SWIPE_THRESHOLD) {
       if (deltaY > 0) {
-        // Swiped DOWN → Next reel
         goNext()
       } else {
-        // Swiped UP → Previous reel
         goPrev()
       }
     }
@@ -196,7 +194,6 @@ export default function ReelsPage() {
     setLikes(prev => ({ ...prev, [currentIndex]: !prev[currentIndex] }))
   }
 
-  // Scroll to bottom when comments panel opens
   useEffect(() => {
     if (showComments) {
       setTimeout(() => {
@@ -345,7 +342,6 @@ export default function ReelsPage() {
         <div className="absolute hidden md:flex left-4 top-1/2 flex-col gap-2 -translate-y-1/2 z-[60]">
           <motion.button
             onClick={goPrev}
-            disabled={false} // Always enable for infinite loop
             className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/20 transition-colors disabled:opacity-30"
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
@@ -355,7 +351,6 @@ export default function ReelsPage() {
 
           <motion.button
             onClick={goNext}
-            disabled={false}
             className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/20 transition-colors disabled:opacity-30"
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
@@ -410,7 +405,7 @@ export default function ReelsPage() {
               {/* Comments list */}
               <div
                 ref={commentsRef}
-                className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[calc(80vh-160px)] [scrollbar-width:thin]"
+                className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[calc(80vh-160px)]"
                 style={{ WebkitOverflowScrolling: 'touch' }}
               >
                 {currentComments.length === 0 ? (
