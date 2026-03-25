@@ -11,25 +11,10 @@
       "static/css/css-app_globals_css.css",
       "static/chunks/app/layout.js"
     ],
-    "/journey/study/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/journey/study/page.js"
-    ],
     "/reels/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/reels/page.js"
-    ],
-    "/journey/work/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/journey/work/page.js"
-    ],
-    "/_not-found/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/_not-found/page.js"
     ]
   }
 }

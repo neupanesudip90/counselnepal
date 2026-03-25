@@ -1,8 +1,10 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { successStories } from '../data'
-import { X, Heart, MessageCircle, Send, ChevronUp, ChevronDown, BadgeCheck, Play, ArrowLeft, Share2 } from 'lucide-react'
+import { X, Heart, MessageCircle, Send, ChevronUp, ChevronDown, BadgeCheck, ArrowLeft, Share2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 const allComments: Record<number, { id: number; user: string; text: string; time: string; likes: number }[]> = {
   1: [
@@ -29,204 +31,452 @@ const allComments: Record<number, { id: number; user: string; text: string; time
   ],
 }
 
+// Minimum vertical swipe distance to trigger change (pixels)
+const SWIPE_THRESHOLD = 80
+
 export default function ReelsPage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [likes, setLikes] = useState<Record<number, boolean>>({})
-  const [comments, setComments] = useState(allComments)
+  const [comments, setComments] = useState<Record<number, []>>(allComments)
   const [newComment, setNewComment] = useState('')
   const [showComments, setShowComments] = useState(false)
   const [likedComments, setLikedComments] = useState<Record<number, boolean>>({})
+
   const commentsRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const videoStories = successStories.filter(s => s.type === 'video')
+  const touchStartY = useRef(0)
+  const touchStartTime = useRef(0)
+  const isScrolling = useRef(false)
+
+  const videoStories = successStories.filter((s): s is typeof s & { type: 'video' } => s.type === 'video')
   const current = videoStories[currentIndex]
   const currentComments = comments[currentIndex + 1] || []
 
-  const goNext = () => { if (currentIndex < videoStories.length - 1) { setCurrentIndex(i => i + 1); setShowComments(false) } }
-  const goPrev = () => { if (currentIndex > 0) { setCurrentIndex(i => i - 1); setShowComments(false) } }
+  // ========================================
+  // ✅ Navigation functions (with infinite loop)
+  // ========================================
+  const goToIndex = useCallback((newIndex: number) => {
+    if (isScrolling.current) return
+    isScrolling.current = true
 
-  // Keyboard navigation
+    // Handle infinite loop
+    let finalIndex = newIndex
+    if (finalIndex < 0) {
+      finalIndex = videoStories.length - 1
+    } else if (finalIndex >= videoStories.length) {
+      finalIndex = 0
+    }
+
+    setTimeout(() => {
+      setCurrentIndex(finalIndex)
+      setShowComments(false)
+      isScrolling.current = false
+    }, 150) // Small delay for smooth transition feel
+  }, [videoStories.length])
+
+  const goNext = useCallback(() => {
+    goToIndex(currentIndex + 1)
+  }, [goToIndex, currentIndex])
+
+  const goPrev = useCallback(() => {
+    goToIndex(currentIndex - 1)
+  }, [goToIndex, currentIndex])
+
+  // ========================================
+  // ✅ Keyboard navigation
+  // ========================================
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') goNext()
-      if (e.key === 'ArrowUp') goPrev()
-      if (e.key === 'Escape') window.history.back()
+      if (showComments) return // Disable while comments open
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        goNext()
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        goPrev()
+      }
+      if (e.key === 'Escape') {
+        setShowComments(false)
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [currentIndex])
+  }, [goNext, goPrev, showComments])
 
+  // ========================================
+  // ✅ Mouse wheel (desktop)
+  // ========================================
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (showComments || isScrolling.current) return
+
+      const delta = e.deltaY
+      if (Math.abs(delta) > 10) { // Prevent tiny scrolls
+        if (delta > 0) {
+          goNext()
+        } else {
+          goPrev()
+        }
+      }
+    }
+
+    window.addEventListener('wheel', handleWheel, { passive: true })
+    return () => window.removeEventListener('wheel', handleWheel)
+  }, [goNext, goPrev, showComments])
+
+  // ========================================
+  // ✅ Touch/swipe (mobile)
+  // ========================================
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (showComments) return // Don't swipe while comments open
+
+    touchStartY.current = e.touches[0].clientY
+    touchStartTime.current = Date.now()
+  }, [showComments])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (showComments) return
+    // Optional: prevent horizontal scroll interference
+    const xDiff = Math.abs(e.touches[0].clientX - (touchStartY.current as any))
+    if (xDiff > 50) {
+      // User is swiping horizontally - ignore vertical swipe
+    }
+  }, [showComments])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (showComments) return
+
+    const touchEndY = e.changedTouches[0].clientY
+    const deltaY = touchEndY - touchStartY.current
+    const elapsed = Date.now() - touchStartTime.current
+
+    // Detect swipe direction
+    if (elapsed < 500 && Math.abs(deltaY) > SWIPE_THRESHOLD) {
+      if (deltaY > 0) {
+        // Swiped DOWN → Next reel
+        goNext()
+      } else {
+        // Swiped UP → Previous reel
+        goPrev()
+      }
+    }
+  }, [goNext, goPrev, showComments])
+
+  // ========================================
+  // ✅ Comment actions
+  // ========================================
   const sendComment = () => {
     if (!newComment.trim()) return
     const storyId = currentIndex + 1
+
     setComments(prev => ({
       ...prev,
-      [storyId]: [...(prev[storyId] || []), { id: Date.now(), user: 'You', text: newComment, time: 'now', likes: 0 }]
+      [storyId]: [...(prev[storyId] || []), {
+        id: Date.now(),
+        user: 'You',
+        text: newComment,
+        time: 'now',
+        likes: 0
+      }]
     }))
     setNewComment('')
-    setTimeout(() => { commentsRef.current?.scrollTo({ top: commentsRef.current.scrollHeight, behavior: 'smooth' }) }, 100)
+
+    setTimeout(() => {
+      commentsRef.current?.scrollTo({ top: commentsRef.current.scrollHeight, behavior: 'smooth' })
+    }, 100)
   }
 
   const toggleCommentLike = (commentId: number) => {
     setLikedComments(prev => ({ ...prev, [commentId]: !prev[commentId] }))
   }
 
+  const toggleLikeStory = () => {
+    setLikes(prev => ({ ...prev, [currentIndex]: !prev[currentIndex] }))
+  }
+
+  // Scroll to bottom when comments panel opens
+  useEffect(() => {
+    if (showComments) {
+      setTimeout(() => {
+        commentsRef.current?.scrollTo({ top: commentsRef.current.scrollHeight, behavior: 'smooth' })
+      }, 300)
+    }
+  }, [showComments, currentIndex])
+
   return (
-    <div className="fixed inset-0 bg-black flex overflow-hidden" ref={containerRef}>
-      {/* Back button */}
-      <Link href="/" className="absolute top-4 left-4 z-50 flex items-center gap-2 text-white/80 hover:text-white transition-colors bg-black/30 backdrop-blur-sm px-3 py-2 rounded-full text-sm font-medium">
-        <ArrowLeft className="w-4 h-4" /> Back
+    <div ref={containerRef} className="fixed inset-0 bg-black flex flex-col overflow-hidden">
+      {/* ← Back Button */}
+      <Link
+        href="/"
+        className="absolute top-4 left-4 z-[100] flex items-center gap-2 text-white/90 hover:text-white transition-colors bg-black/40 backdrop-blur-md px-3 py-2 rounded-full text-sm font-medium"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span className="hidden sm:inline">Back</span>
       </Link>
 
-      {/* Reel counter */}
-      <div className="absolute top-4 right-4 z-50 bg-black/40 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full font-mono">
+      {/* 🔢 Counter */}
+      <div className="absolute top-4 right-4 z-[100] bg-black/40 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-full font-mono">
         {currentIndex + 1} / {videoStories.length}
       </div>
 
-      {/* Main reel area */}
-      <div className="flex-1 relative flex items-center justify-center">
-        {/* Video/thumbnail */}
-        <div className="relative w-full max-w-sm mx-auto h-full max-h-screen">
-          <img src={current?.thumbnail} alt={current?.name} className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-black/30" />
+      {/* 🔘 Progress dots (desktop only) */}
+      <nav className="hidden md:flex absolute top-4 right-16 gap-1.5 z-[90]" aria-label="Reel progress">
+        {videoStories.map((_, i) => (
+          <motion.div
+            key={i}
+            className={`h-0.5 w-8 rounded-full ${i === currentIndex ? 'bg-white' : 'bg-white/30'}`}
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: i === currentIndex ? 1 : (i < currentIndex ? 1 : 0) }}
+            transition={{ duration: 0.3 }}
+          />
+        ))}
+      </nav>
 
-          {/* Play icon */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm border-2 border-white/60 flex items-center justify-center">
-              <Play className="w-8 h-8 text-white fill-white ml-1" />
-            </div>
-          </div>
+      {/* 🎬 Main Reel Container (touchable area) */}
+      <div
+        className="flex-1 relative overflow-hidden select-none"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Animated video container */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentIndex}
+            className="relative w-full max-w-sm mx-auto h-full"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05 }}
+            transition={{ duration: 0.2 }}
+          >
+            {/* 📹 Video */}
+            <video
+              src={current?.video}
+              className="w-full h-full object-cover"
+              autoPlay
+              muted
+              loop
+              playsInline
+            />
 
-          {/* Progress bars */}
-          <div className="absolute top-4 left-4 right-16 flex gap-1">
-            {videoStories.map((_, i) => (
-              <div key={i} className="flex-1 h-0.5 rounded-full bg-white/30 overflow-hidden">
-                <div className="h-full bg-white transition-all duration-300" style={{ width: i < currentIndex ? '100%' : i === currentIndex ? '60%' : '0%' }} />
-              </div>
-            ))}
-          </div>
+            {/* 🌙 Dark gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
 
-          {/* Country badge */}
-          <div className="absolute top-10 right-4 bg-primary text-white text-xs font-bold px-2.5 py-1 rounded-full">
-            {current?.country}
-          </div>
-
-          {/* Bottom info */}
-          <div className="absolute bottom-6 left-4 right-16 pb-2">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                {current?.name[0]}
-              </div>
-              <div>
-                <p className="text-white font-display font-bold text-base">{current?.name}</p>
-                <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-2 py-0.5 rounded-full w-fit">
-                  <BadgeCheck className="w-3 h-3 text-cyan-400" />
-                  <span className="text-white/80 text-xs">{current?.consultancy}</span>
-                </div>
-              </div>
-            </div>
-            <p className="text-cyan-300 text-sm font-medium">{current?.university} · {current?.course}</p>
-            <p className="text-white/70 text-sm mt-1 italic leading-relaxed">"{current?.quote}"</p>
-          </div>
-
-          {/* Right action buttons */}
-          <div className="absolute right-3 bottom-24 flex flex-col gap-5 items-center">
-            <button onClick={() => setLikes(prev => ({ ...prev, [currentIndex]: !prev[currentIndex] }))} className="flex flex-col items-center gap-1">
-              <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${likes[currentIndex] ? 'bg-red-500' : 'bg-white/20 backdrop-blur-sm'}`}>
-                <Heart className={`w-5 h-5 ${likes[currentIndex] ? 'text-white fill-white' : 'text-white'}`} />
-              </div>
-              <span className="text-white text-xs font-medium">{likes[currentIndex] ? (120 + currentIndex * 37 + 1) : (120 + currentIndex * 37)}</span>
-            </button>
-            <button onClick={() => setShowComments(!showComments)} className="flex flex-col items-center gap-1">
-              <div className={`w-11 h-11 rounded-full flex items-center justify-center ${showComments ? 'bg-primary' : 'bg-white/20 backdrop-blur-sm'}`}>
-                <MessageCircle className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-white text-xs font-medium">{currentComments.length}</span>
-            </button>
-            <button className="flex flex-col items-center gap-1">
-              <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Share2 className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-white text-xs font-medium">Share</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Up / Down navigation */}
-        <button onClick={goPrev} disabled={currentIndex === 0} className="absolute top-1/2 left-4 -translate-y-8 w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center text-white disabled:opacity-20 hover:bg-white/20 transition-all">
-          <ChevronUp className="w-5 h-5" />
-        </button>
-        <button onClick={goNext} disabled={currentIndex === videoStories.length - 1} className="absolute bottom-1/2 left-4 translate-y-8 w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center text-white disabled:opacity-20 hover:bg-white/20 transition-all">
-          <ChevronDown className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Comments panel */}
-      {showComments && (
-        <div className="w-full sm:w-96 bg-white flex flex-col absolute sm:relative bottom-0 left-0 right-0 sm:bottom-auto sm:left-auto sm:right-auto h-[60vh] sm:h-full rounded-t-3xl sm:rounded-none shadow-2xl">
-          {/* Comments header */}
-          <div className="p-4 border-b border-border flex items-center justify-between">
-            <div>
-              <p className="font-display font-bold text-dark">Comments</p>
-              <p className="text-slate text-xs">{currentComments.length} comments</p>
-            </div>
-            <button onClick={() => setShowComments(false)} className="w-8 h-8 rounded-full bg-surface flex items-center justify-center sm:hidden">
-              <X className="w-4 h-4 text-slate" />
-            </button>
-          </div>
-
-          {/* Comments list */}
-          <div ref={commentsRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-            {currentComments.map((c) => (
-              <div key={c.id} className="flex gap-3">
-                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-bold flex-shrink-0">
-                  {c.user[0]}
-                </div>
-                <div className="flex-1">
-                  <div className="bg-surface rounded-2xl rounded-tl-none px-4 py-2.5">
-                    <p className="text-xs font-bold text-dark">{c.user}</p>
-                    <p className="text-sm text-dark mt-0.5 leading-relaxed">{c.text}</p>
-                  </div>
-                  <div className="flex items-center gap-4 mt-1.5 ml-2">
-                    <span className="text-xs text-slate">{c.time}</span>
-                    <button onClick={() => toggleCommentLike(c.id)} className={`text-xs font-medium ${likedComments[c.id] ? 'text-red-500' : 'text-slate hover:text-red-500'} transition-colors`}>
-                      ❤️ {c.likes + (likedComments[c.id] ? 1 : 0)}
-                    </button>
-                    <button className="text-xs text-slate hover:text-dark transition-colors">Reply</button>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {currentComments.length === 0 && (
-              <div className="text-center py-10">
-                <p className="text-3xl mb-2">💬</p>
-                <p className="text-slate text-sm">No comments yet. Be first!</p>
+            {/* 🏷️ Country tag */}
+            {current?.country && (
+              <div className="absolute top-10 right-4 z-[50] bg-primary text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg">
+                {current.country}
               </div>
             )}
-          </div>
 
-          {/* Comment input */}
-          <div className="p-4 border-t border-border bg-white">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold flex-shrink-0">Y</div>
-              <div className="flex-1 flex items-center gap-2 bg-surface rounded-full px-4 py-2.5 border border-border focus-within:border-primary transition-colors">
-                <input
-                  type="text"
-                  placeholder="Write a comment..."
-                  value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && sendComment()}
-                  className="flex-1 bg-transparent text-sm focus:outline-none text-dark placeholder-slate"
-                />
-                <button onClick={sendComment} disabled={!newComment.trim()} className="text-primary hover:text-blue-700 transition-colors disabled:opacity-40">
-                  <Send className="w-4 h-4" />
+            {/* 👤 User info */}
+            <div className="absolute bottom-6 left-4 right-16 z-[50] pb-2">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                  {current?.name?.[0]}
+                </div>
+                <div>
+                  <p className="text-white font-display font-bold text-base">{current?.name}</p>
+                  <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2 py-0.5 rounded-full">
+                    <BadgeCheck className="w-3 h-3 text-cyan-400" />
+                    <span className="text-white/80 text-xs">{current?.consultancy}</span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-cyan-300 text-sm font-medium">
+                {current?.university} · {current?.course}
+              </p>
+              <p className="text-white/70 text-sm mt-1 italic line-clamp-2">"{current?.quote}"</p>
+            </div>
+
+            {/* ○ Action buttons (right side) */}
+            <div className="absolute right-3 bottom-24 flex flex-col gap-5 items-center z-[50]">
+              {/* Like */}
+              <button onClick={toggleLikeStory} className="flex flex-col items-center gap-1" aria-label="Like">
+                <motion.div
+                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${
+                    likes[currentIndex] ? 'bg-red-500' : 'bg-white/20 backdrop-blur-md'
+                  }`}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <Heart
+                    className={`w-5 h-5 ${
+                      likes[currentIndex] ? 'text-white fill-white' : 'text-white'
+                    }`}
+                  />
+                </motion.div>
+                <span className="text-white text-xs font-medium">
+                  {(120 + currentIndex * 37) + (likes[currentIndex] ? 1 : 0)}
+                </span>
+              </button>
+
+              {/* Comments */}
+              <button
+                onClick={() => setShowComments(!showComments)}
+                className="flex flex-col items-center gap-1"
+                aria-label="Comments"
+              >
+                <div
+                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${
+                    showComments ? 'bg-primary' : 'bg-white/20 backdrop-blur-md'
+                  }`}
+                >
+                  <MessageCircle className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-white text-xs font-medium">
+                  {currentComments.length}
+                </span>
+              </button>
+
+              {/* Share */}
+              <button className="flex flex-col items-center gap-1" aria-label="Share">
+                <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center shadow-lg hover:bg-white/30 transition-colors">
+                  <Share2 className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-white text-xs font-medium">Share</span>
+              </button>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* ↑↓ Nav hints (visible on desktop) */}
+        <div className="absolute hidden md:flex left-4 top-1/2 flex-col gap-2 -translate-y-1/2 z-[60]">
+          <motion.button
+            onClick={goPrev}
+            disabled={false} // Always enable for infinite loop
+            className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/20 transition-colors disabled:opacity-30"
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <ChevronUp className="w-5 h-5" />
+          </motion.button>
+
+          <motion.button
+            onClick={goNext}
+            disabled={false}
+            className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/20 transition-colors disabled:opacity-30"
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <ChevronDown className="w-5 h-5" />
+          </motion.button>
+        </div>
+
+        {/* 📱 Mobile swipe hint */}
+        <div className="absolute md:hidden bottom-32 left-0 right-0 flex justify-center pointer-events-none z-[60]">
+          <span className="text-white/30 text-xs">Swipe ↕️ to browse</span>
+        </div>
+      </div>
+
+      {/* 💬 Comments Panel */}
+      <AnimatePresence>
+        {showComments && (
+          <>
+            {/* Overlay */}
+            <motion.div
+              className="fixed inset-0 bg-black/50 z-[150]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowComments(false)}
+            />
+
+            {/* Drawer */}
+            <motion.div
+              className="fixed bottom-0 left-0 right-0 bg-white z-[160] rounded-t-3xl shadow-2xl max-h-[80vh]"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            >
+              {/* Header */}
+              <div className="p-4 border-b flex items-center justify-between bg-gray-50">
+                <div>
+                  <div className="font-bold text-gray-900">Comments</div>
+                  <div className="text-xs text-gray-500">{currentComments.length} comments</div>
+                </div>
+
+                <button
+                  onClick={() => setShowComments(false)}
+                  className="w-9 h-9 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                  aria-label="Close comments"
+                >
+                  <X className="w-4 h-4 text-gray-700" />
                 </button>
               </div>
-            </div>
-            <p className="text-center text-xs text-slate mt-2">Use ↑↓ arrow keys to scroll reels</p>
-          </div>
-        </div>
-      )}
+
+              {/* Comments list */}
+              <div
+                ref={commentsRef}
+                className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[calc(80vh-160px)] [scrollbar-width:thin]"
+                style={{ WebkitOverflowScrolling: 'touch' }}
+              >
+                {currentComments.length === 0 ? (
+                  <div className="py-10 text-center">
+                    <div className="text-4xl mb-2">💬</div>
+                    <p className="text-gray-500 text-sm">No comments yet. Be first!</p>
+                  </div>
+                ) : (
+                  currentComments.map((c) => (
+                    <div key={c.id} className="flex gap-3">
+                      <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold flex-shrink-0">
+                        {c.user.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="bg-gray-100 rounded-2xl rounded-tl-none px-4 py-2.5">
+                          <p className="text-xs font-bold text-gray-700">{c.user}</p>
+                          <p className="text-sm text-gray-900 mt-0.5 leading-relaxed">{c.text}</p>
+                        </div>
+                        <div className="flex items-center gap-4 mt-1.5 ml-1">
+                          <span className="text-xs text-gray-500">{c.time}</span>
+                          <button
+                            onClick={() => toggleCommentLike(c.id)}
+                            className={`text-xs font-medium transition-colors ${
+                              likedComments[c.id] ? 'text-red-500' : 'text-gray-500 hover:text-red-500'
+                            }`}
+                          >
+                            ❤️ {c.likes + (likedComments[c.id] ? 1 : 0)}
+                          </button>
+                          <button className="text-xs text-gray-500 hover:text-gray-700">Reply</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Input */}
+              <div className="p-4 border-t bg-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                    Y
+                  </div>
+                  <div className="flex-1 flex items-center gap-2 bg-gray-100 rounded-full px-4 py-2.5 border border-gray-200 focus-within:border-primary transition-colors">
+                    <input
+                      type="text"
+                      placeholder="Write a comment..."
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && sendComment()}
+                      className="flex-1 bg-transparent text-sm focus:outline-none text-gray-700 placeholder-gray-500"
+                    />
+                    <button
+                      onClick={sendComment}
+                      disabled={!newComment.trim()}
+                      className="w-9 h-9 rounded-full bg-blue-600 disabled:bg-blue-300 disabled:opacity-50 flex items-center justify-center transition-colors"
+                      aria-label="Send comment"
+                    >
+                      <Send className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
